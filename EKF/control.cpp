@@ -42,6 +42,10 @@
 #include "../ecl.h"
 #include "ekf.h"
 #include <mathlib/mathlib.h>
+#include <systemlib/mavlink_log.h>
+#include <uORB/topics/mavlink_log.h>
+
+//static orb_advert_t mavlink_log_pub = nullptr;
 
 void Ekf::controlFusionModes()
 {
@@ -1051,6 +1055,8 @@ void Ekf::controlHeightFusion()
 
 	case VDIST_SENSOR_RANGE:
 		if (_range_sensor.isDataHealthy()) {
+			//mavlink_log_warning(&mavlink_log_pub, "data healthy");
+			
 			setControlRangeHeight();
 			fuse_height = true;
 
@@ -1072,6 +1078,7 @@ void Ekf::controlHeightFusion()
 		} else if (_control_status.flags.baro_hgt && _baro_data_ready && !_baro_hgt_faulty) {
 			// fuse baro data if there was a reset to baro
 			fuse_height = true;
+			//mavlink_log_warning(&mavlink_log_pub, "data not healthy");
 		}
 
 		break;
@@ -1208,6 +1215,9 @@ void Ekf::controlHeightFusion()
 			fuseVerticalPosition(_rng_hgt_innov,rng_hgt_innov_gate,
 				rng_hgt_obs_var, _rng_hgt_innov_var,_rng_hgt_test_ratio);
 
+			//ECL_WARN("rng hgt %f",double(_rng_hgt_innov(2)));
+			//mavlink_log_warning(&mavlink_log_pub, "rng hgt %f",double(_rng_hgt_innov(2)));
+
 		} else if (_control_status.flags.ev_hgt) {
 			Vector2f ev_hgt_innov_gate;
 			Vector3f ev_hgt_obs_var;
@@ -1226,8 +1236,10 @@ void Ekf::controlHeightFusion()
 
 void Ekf::checkRangeAidSuitability()
 {
-	if (_control_status.flags.in_air
-	    && _range_sensor.isHealthy()
+	// if (_control_status.flags.in_air
+	//     && _range_sensor.isHealthy()
+	//     && isTerrainEstimateValid()) {
+	if (_range_sensor.isHealthy()
 	    && isTerrainEstimateValid()) {
 		// check if we can use range finder measurements to estimate height, use hysteresis to avoid rapid switching
 		// Note that the 0.7 coefficients and the innovation check are arbitrary values but work well in practice

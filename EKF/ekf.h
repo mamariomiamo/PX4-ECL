@@ -942,7 +942,6 @@ private:
 	// sensor measurement
 	float calculate_synthetic_mag_z_measurement(const Vector3f &mag_meas, const Vector3f &mag_earth_predicted);
 
-
 	bool isRecent(uint64_t sensor_timestamp, uint64_t acceptance_interval) const
 	{
 		return sensor_timestamp + acceptance_interval > _time_last_imu;

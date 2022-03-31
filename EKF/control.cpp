@@ -250,6 +250,9 @@ void Ekf::controlExternalVisionFusion()
 				_fuse_hpos_as_odom = false;
 			}
 
+			// hm: we overside this to be always use as odom, so to avoid jump in VIO polluting local position estimate
+			_fuse_hpos_as_odom = true;
+
 			if (_fuse_hpos_as_odom) {
 				if (!_hpos_prev_available) {
 					// no previous observation available to calculate position change

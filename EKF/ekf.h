@@ -301,6 +301,8 @@ public:
 		return last_sensor_timestamp + timeout_period < _time_last_imu;
 	}
 
+	auto lastImu(){return _time_last_imu;}
+
 private:
 
 	// set the internal states and status to their default value
@@ -939,8 +941,6 @@ private:
 	// calculate a synthetic value for the magnetometer Z component, given the 3D magnetomter
 	// sensor measurement
 	float calculate_synthetic_mag_z_measurement(const Vector3f &mag_meas, const Vector3f &mag_earth_predicted);
-
-
 
 	bool isRecent(uint64_t sensor_timestamp, uint64_t acceptance_interval) const
 	{

@@ -296,6 +296,13 @@ public:
 	bool getDataEKFGSF(float *yaw_composite, float *yaw_variance, float yaw[N_MODELS_EKFGSF],
 			   float innov_VN[N_MODELS_EKFGSF], float innov_VE[N_MODELS_EKFGSF], float weight[N_MODELS_EKFGSF]);
 
+	bool isTimedOut(uint64_t last_sensor_timestamp, uint64_t timeout_period) const
+	{
+		return last_sensor_timestamp + timeout_period < _time_last_imu;
+	}
+
+	auto lastImu(){return _time_last_imu;}
+
 private:
 
 	// set the internal states and status to their default value
@@ -935,10 +942,6 @@ private:
 	// sensor measurement
 	float calculate_synthetic_mag_z_measurement(const Vector3f &mag_meas, const Vector3f &mag_earth_predicted);
 
-	bool isTimedOut(uint64_t last_sensor_timestamp, uint64_t timeout_period) const
-	{
-		return last_sensor_timestamp + timeout_period < _time_last_imu;
-	}
 
 	bool isRecent(uint64_t sensor_timestamp, uint64_t acceptance_interval) const
 	{

@@ -299,8 +299,8 @@ void Ekf::controlExternalVisionFusion()
 					// observation 1-STD error, incremental pos observation is expected to have more uncertainty
 					Matrix3f ev_pos_var = matrix::diag(_ev_sample_delayed.posVar);
 					ev_pos_var = _R_ev_to_ekf * ev_pos_var * _R_ev_to_ekf.transpose();
-					ev_pos_obs_var(0) = fmaxf(ev_pos_var(0, 0), sq(0.5f));
-					ev_pos_obs_var(1) = fmaxf(ev_pos_var(1, 1), sq(0.5f));
+					ev_pos_obs_var(0) = fmaxf(ev_pos_var(0, 0), sq(0.01f));
+					ev_pos_obs_var(1) = fmaxf(ev_pos_var(1, 1), sq(0.01f));
 				}
 
 				// record observation and estimate for use next time

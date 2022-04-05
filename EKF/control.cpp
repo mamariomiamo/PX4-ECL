@@ -201,6 +201,7 @@ void Ekf::controlExternalVisionFusion()
 		// needs to be calculated and the observations rotated into the EKF frame of reference
 		if ((_params.fusion_mode & MASK_ROTATE_EV) && ((_params.fusion_mode & MASK_USE_EVPOS) || (_params.fusion_mode & MASK_USE_EVVEL)) && !_control_status.flags.ev_yaw) {
 			// rotate EV measurements into the EKF Navigation frame
+			// hm: this is the only place that _R_ev_to_ekf is set, only used if ev yaw is not fused
 			calcExtVisRotMat();
 		}
 
@@ -225,6 +226,7 @@ void Ekf::controlExternalVisionFusion()
 		if (!_inhibit_ev_yaw_use && (_params.fusion_mode & MASK_USE_EVYAW) && !_control_status.flags.ev_yaw && _control_status.flags.tilt_align) {
 			// don't start using EV data unless data is arriving frequently
 			if (isRecent(_time_last_ext_vision, 2 * EV_MAX_INTERVAL)) {
+				// hm: start yaw align using vision will always reset yaw to vision. This is the correct behaviour
 				if (resetYawToEv()) {
 					_control_status.flags.yaw_align = true;
 					startEvYawFusion();
@@ -234,6 +236,11 @@ void Ekf::controlExternalVisionFusion()
 
 		// determine if we should use the horizontal position observations
 		if (_control_status.flags.ev_pos) {
+
+			// hm: variable to track if we should perform ev position update
+			bool ev_pos_do_update = true;
+
+			static int ev_pos_fusion_failed = 0;
 
 			Vector3f ev_pos_obs_var;
 			Vector2f ev_pos_innov_gates;
@@ -254,9 +261,29 @@ void Ekf::controlExternalVisionFusion()
 			_fuse_hpos_as_odom = true;
 
 			if (_fuse_hpos_as_odom) {
+
+				// hm: we should have a logic to determine if the visual odom has crashed recently.
+				// In that case, we need to invalidate the previous horizontal position availability
+
+				// time out of 3 sec
+				if (_hpos_prev_available && isTimedOut(_time_last_delpos_fuse, (uint64_t)3E6)){
+					ECL_WARN("ev_pos: Detect Possible Vision Data Gap %llu us, invalidate previous hpos", (unsigned long long)(_time_last_imu - _time_last_delpos_fuse) );
+					_hpos_prev_available = false;
+				}
+
+				if (ev_pos_fusion_failed >= 5) {
+					// ECL_WARN("ev_pos: Detect too many fusion failues in the last %llu us, invalidate previous hpos", (unsigned long long)(_time_last_imu - _time_last_delpos_fuse) );
+					_hpos_prev_available = false;
+					ev_pos_fusion_failed = 0;
+				}
+
+				// hm: there are two cases _hpos_prev_available == false
+				// case 1: there is a more than 1 sec timeout
+				// case 2: fusion failed for too long, a shorter timeout is tolerated
 				if (!_hpos_prev_available) {
 					// no previous observation available to calculate position change
-					_hpos_prev_available = true;
+					// _hpos_prev_available = true;
+					ev_pos_do_update = false;
 
 				} else {
 					// calculate the change in position since the last measurement
@@ -272,13 +299,27 @@ void Ekf::controlExternalVisionFusion()
 					// observation 1-STD error, incremental pos observation is expected to have more uncertainty
 					Matrix3f ev_pos_var = matrix::diag(_ev_sample_delayed.posVar);
 					ev_pos_var = _R_ev_to_ekf * ev_pos_var * _R_ev_to_ekf.transpose();
-					ev_pos_obs_var(0) = fmaxf(ev_pos_var(0, 0), sq(0.5f));
-					ev_pos_obs_var(1) = fmaxf(ev_pos_var(1, 1), sq(0.5f));
+					ev_pos_obs_var(0) = fmaxf(ev_pos_var(0, 0), sq(0.01f));
+					ev_pos_obs_var(1) = fmaxf(ev_pos_var(1, 1), sq(0.01f));
 				}
 
 				// record observation and estimate for use next time
-				_pos_meas_prev = _ev_sample_delayed.pos;
-				_hpos_pred_prev = _state.pos.xy();
+				// _pos_meas_prev = _ev_sample_delayed.pos;
+				// _hpos_pred_prev = _state.pos.xy();
+
+				// hm: if gps is used now, then use nearest position estimate, otherwise, stop the last position update to the last known.
+				if (_control_status.flags.gps || !_hpos_prev_available){
+					_pos_meas_prev = _ev_sample_delayed.pos;
+					_hpos_pred_prev = _state.pos.xy();
+
+					if (!_hpos_prev_available){
+						ECL_INFO("ev_pos: Previous Horizontal Position Initialised");
+						_hpos_prev_available = true;
+
+						// hm: a fake update
+						_time_last_delpos_fuse = _time_last_imu;
+					}
+				}
 
 			} else {
 				// use the absolute position
@@ -306,10 +347,20 @@ void Ekf::controlExternalVisionFusion()
 				}
 			}
 
-			// innovation gate size
-			ev_pos_innov_gates(0) = fmaxf(_params.ev_pos_innov_gate, 1.0f);
 
-			fuseHorizontalPosition(_ev_pos_innov, ev_pos_innov_gates, ev_pos_obs_var, _ev_pos_innov_var, _ev_pos_test_ratio);
+
+			// hm: if ev operates in odom mode, we should skip update if it has not or just gotten previous position in the current round
+			if (ev_pos_do_update){
+				// innovation gate size
+				ev_pos_innov_gates(0) = fmaxf(_params.ev_pos_innov_gate, 1.0f);
+
+				bool fusion_successful = fuseHorizontalPosition(_ev_pos_innov, ev_pos_innov_gates, ev_pos_obs_var, _ev_pos_innov_var, _ev_pos_test_ratio);
+				if (!fusion_successful)
+					ev_pos_fusion_failed++;
+				else
+					ev_pos_fusion_failed = 0;
+			}
+
 		}
 
 		// determine if we should use the velocity observations
@@ -339,6 +390,7 @@ void Ekf::controlExternalVisionFusion()
 
 		// determine if we should use the yaw observation
 		if (_control_status.flags.ev_yaw) {
+			// hm: yaw fusing for ev happens here, after calcExtVisRotMat() is performed
 			fuseHeading();
 		}
 
@@ -1056,7 +1108,7 @@ void Ekf::controlHeightFusion()
 	case VDIST_SENSOR_RANGE:
 		if (_range_sensor.isDataHealthy()) {
 			//mavlink_log_warning(&mavlink_log_pub, "data healthy");
-			
+
 			setControlRangeHeight();
 			fuse_height = true;
 

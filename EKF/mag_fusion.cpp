@@ -739,6 +739,8 @@ void Ekf::fuseHeading()
 			measured_hdg = -atan2f(mag_earth_pred(1), mag_earth_pred(0)) + getMagDeclination();
 
 		} else if (_control_status.flags.ev_yaw) {
+			// hm: here absolute ev yaw is used
+			// should we consider calcExtVisRotMat() and do rotation, to avoid sudden jumps
 			measured_hdg = getEuler321Yaw(_ev_sample_delayed.quat);
 
 		} else {
